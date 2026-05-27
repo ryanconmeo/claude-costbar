@@ -15,18 +15,20 @@ Total    │  $9.43  out 1.234m tokens since Apr 3, 2025
 Run these commands:
 
 ```bash
-mkdir -p $HOME/.claude/costbar
-cd $HOME/.claude/costbar
-curl -O https://raw.githubusercontent.com/ryanconmeo/claude-costbar/main/costbar.sh
-curl -O https://raw.githubusercontent.com/ryanconmeo/claude-costbar/main/on_user_prompt.sh
-curl -O https://raw.githubusercontent.com/ryanconmeo/claude-costbar/main/on_stop.sh
-curl -O https://raw.githubusercontent.com/ryanconmeo/claude-costbar/main/compute_jsonl_totals.py
-chmod +x costbar.sh on_user_prompt.sh on_stop.sh
+git clone https://github.com/ryanconmeo/claude-costbar "$HOME/.claude/costbar"
+```
+
+If `~/.claude/` is a git repo, add `costbar/` to its `.gitignore` so the nested repo doesn't interfere. Skip this if `~/.claude/.gitignore` uses an allowlist style (`*` with explicit `!file` entries) — in that case the subdirectory is already ignored.
+
+```bash
+if [ -d "$HOME/.claude/.git" ]; then
+  grep -qxF 'costbar/' "$HOME/.claude/.gitignore" 2>/dev/null || echo 'costbar/' >> "$HOME/.claude/.gitignore"
+fi
 ```
 
 Then merge the following into `~/.claude/settings.json`. Use the `update-config` skill if available — otherwise show the user this snippet and ask them to add it manually, then restart Claude Code.
 
-**Important:** The `hooks` arrays must be *merged*, not replaced. If `Stop` or `UserPromptSubmit` hooks already exist from other projects, append these entries to the existing arrays.
+**The `hooks` arrays must be merged, not replaced.** If `Stop` or `UserPromptSubmit` hooks already exist from other projects, append these entries to the existing arrays.
 
 ```json
 "statusLine": {
@@ -45,22 +47,28 @@ Then merge the following into `~/.claude/settings.json`. Use the `update-config`
 
 Restart Claude Code after saving.
 
-## Files
+## Install
 
-**`costbar.sh`** — statusLine command. Reads hook payloads on each API response and renders the 5-row display.
-
-**`on_user_prompt.sh`** — `UserPromptSubmit` hook. Snapshots cost and token baselines at the start of each turn so the status bar can compute accurate per-turn deltas.
-
-**`on_stop.sh`** — `Stop` hook. Parses the JSONL transcript for the final session cost and updates the historical session cache.
-
-**`compute_jsonl_totals.py`** — maintains `~/.claude/cache/session_totals.json`, a rolling record of per-session cost, output tokens, turn count, and date. Called by `on_stop.sh`.
-
-## Installation
-
-**Prerequisites:** [Claude Code](https://claude.ai/code), `jq`, `python3`.
+**Prerequisites:** [Claude Code](https://claude.ai/code), `git`, `jq`, `python3`.
 
 ```bash
-mkdir -p $HOME/.claude/costbar && cd $HOME/.claude/costbar
+git clone https://github.com/ryanconmeo/claude-costbar "$HOME/.claude/costbar"
+```
+
+If `~/.claude/` is a git repo with a permissive `.gitignore`, append `costbar/` to it:
+
+```bash
+if [ -d "$HOME/.claude/.git" ]; then
+  grep -qxF 'costbar/' "$HOME/.claude/.gitignore" 2>/dev/null || echo 'costbar/' >> "$HOME/.claude/.gitignore"
+fi
+```
+
+Merge the `settings.json` snippet above, then restart Claude Code.
+
+**No git?** Install with curl instead:
+
+```bash
+mkdir -p "$HOME/.claude/costbar" && cd "$HOME/.claude/costbar"
 curl -O https://raw.githubusercontent.com/ryanconmeo/claude-costbar/main/costbar.sh
 curl -O https://raw.githubusercontent.com/ryanconmeo/claude-costbar/main/on_user_prompt.sh
 curl -O https://raw.githubusercontent.com/ryanconmeo/claude-costbar/main/on_stop.sh
@@ -68,33 +76,33 @@ curl -O https://raw.githubusercontent.com/ryanconmeo/claude-costbar/main/compute
 chmod +x costbar.sh on_user_prompt.sh on_stop.sh
 ```
 
-Merge into `~/.claude/settings.json` (see above), then restart Claude Code.
+## Update
+
+```bash
+cd "$HOME/.claude/costbar" && git pull
+```
 
 ## Uninstall
 
 ```bash
-rm -rf ~/.claude/costbar
+rm -rf "$HOME/.claude/costbar"
 ```
 
-Remove the `statusLine` key and the two costbar hook entries from `~/.claude/settings.json`, then restart Claude Code.
-
-Optionally remove accumulated data:
+Remove the `statusLine` key and the two costbar hook entries from `~/.claude/settings.json`, then restart Claude Code. Optionally remove accumulated data:
 
 ```bash
 rm -f ~/.claude/cache/session_totals.json
 ```
 
-## Status bar rows
+## Files
 
-**Turn** — cost and output tokens for the most recent (or in-progress) turn. Color reflects where this turn falls relative to your historical mean cost-per-turn (green / yellow / red).
+**`costbar.sh`** — statusLine command. Reads hook payloads on each API response and renders the 5-row display.
 
-**Session** — running cost and output tokens for the current session, plus context window % remaining.
+**`on_user_prompt.sh`** — `UserPromptSubmit` hook. Snapshots cost and token baselines at the start of each turn so the bar can compute accurate per-turn deltas.
 
-**5-hour** — rate limit window: % remaining and reset time.
+**`on_stop.sh`** — `Stop` hook. Parses the JSONL transcript for the final session cost and updates the historical session cache.
 
-**Week N** — cost and output tokens since the most recent Anthropic 7-day reset, plus rate limit % remaining, reset time, and a 7-dot activity indicator. N is a sequential week counter from your first recorded session.
-
-**Total** — grand total cost and output tokens across all recorded sessions.
+**`compute_jsonl_totals.py`** — maintains `~/.claude/cache/session_totals.json`, a rolling record of per-session cost, output tokens, turn count, and date. Called by `on_stop.sh`.
 
 ## How cost is computed
 
