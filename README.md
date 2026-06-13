@@ -1,14 +1,17 @@
 # claude-costbar
 
-Live cost, token, and rate-limit status bar for Claude Code. Displays a 5-row bar showing per-turn and session cost, context window usage, 5-hour and weekly rate limits, and environmental impact equivalents.
+Live cost, token, and rate-limit status bar for Claude Code. Displays a header line with the current model (always shown) plus a 5-row bar showing per-turn and session cost, context window usage, 5-hour and weekly rate limits, and environmental impact equivalents.
 
 ```
+⏺ Opus 4.8
 Turn     │  $0.08  out 1.2k  ·  ≈ 4 ft of driving (gas car)
 Session  │  $0.31  out 18k · 87% left  ·  ≈ 0.02 kettle boils
 5-hour   │  43% left  (↺10:30 PM)
 Week 4   │  $2.14  out 142k · 71% left  (↺Tue 9:00 AM)  ●●●●●●●
 Total    │  $9.43  out 1.234m tokens since Apr 3, 2025
 ```
+
+The header line carries a violet model badge — deliberately off the cost-row palette so it reads as a separate banner. It always shows the model on its own; an optional pluggable segment (current task, git branch, …) can be appended to it — see [Header line](#header-line).
 
 ## If you're Claude and someone asked you to install this
 
@@ -94,9 +97,29 @@ Remove the `statusLine` key and the two costbar hook entries from `~/.claude/set
 rm -f ~/.claude/cache/session_totals.json
 ```
 
+## Header line
+
+The first line always shows the current model (`⏺ Opus 4.8`). costbar owns only the model badge — it knows nothing about whatever gets appended after it.
+
+To append more after the model (current task, git branch, k8s context, …), set the `COSTBAR_HEADER_CMD` environment variable to any shell command. costbar runs it with two variables exported and appends its stdout — which may carry its own ANSI colors — after a ` — ` separator:
+
+| Variable | Meaning |
+|----------|---------|
+| `COSTBAR_SESSION_ID` | the current session id |
+| `COSTBAR_HEADER_BUDGET` | visible columns left on the line, for truncation |
+
+Unset → just the model shows. The command is fully generic; costbar never assumes what it returns. Example wiring (in `~/.claude/settings.json`) that appends a one-line segment from a provider of your choosing:
+
+```json
+"statusLine": {
+  "type": "command",
+  "command": "COSTBAR_HEADER_CMD='my-header-provider --session \"$COSTBAR_SESSION_ID\" --width \"$COSTBAR_HEADER_BUDGET\"' bash $HOME/.claude/costbar/costbar.sh"
+}
+```
+
 ## Files
 
-**`costbar.sh`** — statusLine command. Reads hook payloads on each API response and renders the 5-row display.
+**`costbar.sh`** — statusLine command. Reads hook payloads on each API response and renders the header line plus the 5-row display.
 
 **`on_user_prompt.sh`** — `UserPromptSubmit` hook. Snapshots cost and token baselines at the start of each turn so the bar can compute accurate per-turn deltas.
 

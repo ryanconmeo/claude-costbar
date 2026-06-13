@@ -9,11 +9,16 @@ RED_L=$'\033[38;2;168;88;58m'
 TOK=$'\033[38;2;90;135;175m'
 DIM=$'\033[2m'
 RESET=$'\033[0m'
+# Header (model badge) — violet accent, deliberately off the cost palette
+HDR_MODEL=$'\033[1m\033[38;2;185;140;235m'   # bold violet — the model, always shown
+HDR_GLYPH=$'\033[38;2;150;110;205m'          # leading dot
+HDR_SEP=$'\033[38;2;110;110;120m'            # separator before the optional segment
 
 input=$(cat)
 
 session_id=$(echo "$input" | jq -r '.session_id // "unknown"')
 current=$(echo "$input" | jq -r '.cost.total_cost_usd // 0')
+model_name=$(echo "$input" | jq -r '.model.display_name // .model.id // "Claude"')
 
 PREV_COST_FILE="/tmp/claude_prev_cost_${session_id}"
 PREV_TOK_FILE="/tmp/claude_prev_tok_${session_id}"
@@ -489,8 +494,26 @@ eco_at_col() {
   printf '%s%*s%s' "$base" "$pad" "" "$eco"
 }
 
+# ── Header row: model (always) + an optional pluggable segment ────────────────
+# costbar owns only the model badge — it has no knowledge of what gets appended.
+# To append more (current task, git branch, k8s context, …), set COSTBAR_HEADER_CMD
+# to a shell command. It runs with two env vars exported:
+#   COSTBAR_SESSION_ID     — this session's id
+#   COSTBAR_HEADER_BUDGET  — visible columns left on the line (for truncation)
+# Its stdout (which may carry its own ANSI colors) is appended after the model.
+# Unset → just the model shows. This keeps costbar standalone.
+hdr="${HDR_GLYPH}⏺${RESET} ${HDR_MODEL}${model_name}${RESET}"
+if [ -n "$COSTBAR_HEADER_CMD" ]; then
+  hdr_vlen=$(strip_ansi "$hdr" | tr -d '\n' | wc -m | tr -d ' ')
+  export COSTBAR_SESSION_ID="$session_id"
+  export COSTBAR_HEADER_BUDGET=$(( term_width - hdr_vlen - 5 ))   # -5 for the "  —  " separator
+  extra=$(bash -c "$COSTBAR_HEADER_CMD" 2>/dev/null)
+  [ -n "$extra" ] && hdr="${hdr}  ${HDR_SEP}—${RESET}  ${extra}"
+fi
+
 # ── Assemble output ───────────────────────────────────────
-out=$(eco_at_col "$turn_base" "$turn_eco")
+out="$hdr"
+out+=$'\n'"$(eco_at_col "$turn_base" "$turn_eco")"
 out+=$'\n'"$(eco_at_col "$ses_base" "$ses_eco")"
 out+=$'\n'"$five_base"
 out+=$'\n'"$(eco_at_col "$week_base" "$week_eco")"
